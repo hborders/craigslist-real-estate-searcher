@@ -83,10 +83,11 @@
 	NSString *locationQuery = self.searchBar.text;
 	if ([locationQuery length]) {
 		[self cancel];
+		NSLog(@"searching for location: %@", locationQuery);
 		NSURL *tinyGeocoderUrl = 
 			[NSURL URLWithString:[NSString stringWithFormat:
 								  @"http://tinygeocoder.com/create-api.php?q=%@",
-								  locationQuery]];
+								  [locationQuery stringByAddingPercentEscapesUsingEncoding:NSASCIIStringEncoding]]];
 		self.tinyGeocoderUrlConnection = [[[NSURLConnection alloc] initWithRequest:[NSURLRequest requestWithURL:tinyGeocoderUrl]
 																		  delegate:self] autorelease];
 		[self.tinyGeocoderUrlConnection start];
@@ -118,6 +119,7 @@
 			
 			CLLocation *location = [[[CLLocation alloc] initWithLatitude:latitude
 															   longitude:longitude] autorelease];
+			NSLog(@"found location for query %@", location);
 			[self reverseGeocodeLocation:location];
 		} else {
 			[self alertMessage:[NSString stringWithFormat:
@@ -131,6 +133,9 @@
 			[[[[SBJsonParser alloc] init] autorelease] objectWithString:padMapperAnnotationsJson
 																  error:&error];
 		if (padMapperAnnotationsJson) {			
+			NSLog(@"Found %@ padmapper pins", 
+				  [NSNumber numberWithUnsignedInteger:[padMapperAnnotationDictionaries count]]);
+			NSMutableArray *padMapperAnnotations = [NSMutableArray arrayWithCapacity:[padMapperAnnotationDictionaries count]];
 			for (NSDictionary *padMapperAnnotationDictionary in padMapperAnnotationDictionaries) {
 				NSString *padMapperId = [padMapperAnnotationDictionary objectForKey:@"id"];
 				NSNumber *latitude = [padMapperAnnotationDictionary objectForKey:@"lat"];
@@ -142,7 +147,12 @@
 				[[[HBPadMapperAnnotation alloc] initWithLocationCoordinate2D:locationCoordinate2D
 															  andPadMapperId:padMapperId] autorelease];
 				
-				[self.mapView addAnnotation:padMapperAnnotation];
+				[padMapperAnnotations addObject:padMapperAnnotation];
+			}
+			
+			if ([padMapperAnnotations count]) {
+				[self.mapView removeAnnotations:self.mapView.annotations];
+				[self.mapView addAnnotations:padMapperAnnotations];
 			}
 		} else if (error) {
 			[self alertError:error];
@@ -162,6 +172,7 @@
 - (void)locationManager:(CLLocationManager *)manager
 	didUpdateToLocation:(CLLocation *)newLocation
 		   fromLocation:(CLLocation *)oldLocation {
+	NSLog(@"Found current location %@", newLocation);
 	[self reverseGeocodeLocation:newLocation];
 }
 
@@ -179,6 +190,7 @@
 
 - (void)reverseGeocoder:(MKReverseGeocoder *)geocoder 
 	   didFindPlacemark:(MKPlacemark *)placemark {
+	NSLog(@"found placemark, setting map region");
 	self.searchBar.text = [NSString stringWithFormat:
 						   @"%@, %@ %@",
 						   placemark.locality,
@@ -204,6 +216,9 @@
 #pragma mark MKMapViewDelegate
 
 - (void)mapView:(MKMapView *)mapView regionDidChangeAnimated:(BOOL)animated {
+	[self cancel];
+	NSLog(@"Region changed, Loading padmapper pins");
+	
 	MKCoordinateRegion coordinateRegion = mapView.region;
 	CLLocationCoordinate2D centerLocationCoordinate2D = coordinateRegion.center;
 	MKCoordinateSpan coordinateSpan = coordinateRegion.span;
@@ -235,7 +250,7 @@
 		NSURL *padMapperListingUrl = [NSURL URLWithString:[NSString stringWithFormat:
 														   @"http://www.padmapper.com/show.php?id=%@&src=main",
 														   padMapperAnnotation.padMapperId]];
-		NSLog(@"padMapperListingUrl: %@", padMapperListingUrl);
+		NSLog(@"Pulling padMapper Listing");
 		[self.webView loadRequest:[NSURLRequest requestWithURL:padMapperListingUrl]];
 	}
 }
@@ -259,6 +274,7 @@
 #pragma mark UIWebViewDelegate
 
 - (void)webViewDidFinishLoad:(UIWebView *)webView {
+	NSLog(@"showing real listing");
 	NSString *craigslistRawUrl = 
 		[self.webView stringByEvaluatingJavaScriptFromString:@"document.getElementById('frame').src"];
 	NSURL *craigslistUrl = [NSURL URLWithString:craigslistRawUrl];
@@ -279,6 +295,7 @@
 #pragma mark private API
 
 - (void) reverseGeocodeLocation:(CLLocation *)location {
+	NSLog(@"Reverse Geocoding");
 	self.reverseGeocoder = [[[MKReverseGeocoder alloc] initWithCoordinate:location.coordinate] autorelease];
 	self.reverseGeocoder.delegate = self;
 	[self.reverseGeocoder start];
@@ -298,6 +315,7 @@
 }
 
 - (void) cancel {
+	NSLog(@"Cancelling requests");
 	[self.locationManager stopUpdatingLocation];
 	self.mutableData = [NSMutableData data];
 	[self.tinyGeocoderUrlConnection cancel];
@@ -313,6 +331,7 @@
 #pragma mark IBActions
 
 - (IBAction) currentLocationButtonPressed {
+	NSLog(@"Loading current location");
 	[self cancel];
 	[self.locationManager startUpdatingLocation];
 }
