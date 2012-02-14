@@ -17,8 +17,6 @@
 
 @property (nonatomic, retain) NSMutableData *mutableData;
 
-@property (nonatomic, retain) NSURLConnection *tinyGeocoderUrlConnection;
-
 @property (nonatomic, retain) CLGeocoder *geocoder;
 
 @property (nonatomic, retain) NSURLConnection *padMapperPinsUrlConnection;
@@ -41,8 +39,6 @@
 
 @synthesize mutableData = _mutableData;
 
-@synthesize tinyGeocoderUrlConnection = _tinyGeocoderUrlConnection;
-
 @synthesize geocoder = _geocoder;
 
 @synthesize padMapperPinsUrlConnection = _padMapperPinsUrlConnection;
@@ -55,8 +51,6 @@
 	[_locationManager release];
 	
 	[_mutableData release];
-	
-	[_tinyGeocoderUrlConnection release];
 	
     [_geocoder release];
 	
@@ -85,14 +79,22 @@
 	if ([locationQuery length]) {
 		[self cancel];
 		NSLog(@"searching for location: %@", locationQuery);
-		NSURL *tinyGeocoderUrl = 
-			[NSURL URLWithString:[NSString stringWithFormat:
-								  @"http://tinygeocoder.com/create-api.php?q=%@",
-								  [locationQuery stringByAddingPercentEscapesUsingEncoding:NSASCIIStringEncoding]]];
-		self.tinyGeocoderUrlConnection = [[[NSURLConnection alloc] initWithRequest:[NSURLRequest requestWithURL:tinyGeocoderUrl]
-																		  delegate:self] autorelease];
-		[self.tinyGeocoderUrlConnection start];
-	}
+        
+        [self.geocoder geocodeAddressString:locationQuery completionHandler:^(NSArray *placemarks, NSError *error) {
+            
+            if([placemarks count] > 0) {
+                CLPlacemark *placemark = [placemarks objectAtIndex:0];
+                
+                NSLog(@"found location for query %@", placemark.location);
+                [self reverseGeocodeLocation:placemark.location];
+            } else {
+                [self alertMessage:[NSString stringWithFormat:
+                                    @"Could not find location for %@",
+                                    self.searchBar.text]];
+            }
+
+        }];
+    }
 }
 
 #pragma mark -
@@ -107,27 +109,7 @@
 	NSString *urlDataString = 
 		[[[NSString alloc] initWithData:self.mutableData
 							   encoding:NSUTF8StringEncoding] autorelease];
-	if (connection == self.tinyGeocoderUrlConnection) {
-		self.tinyGeocoderUrlConnection = nil;
-		NSString *possibleTinyGeocoderRawCoordinate = urlDataString;
-		NSArray *possibleRawLatitudeAndRawLongitude = [possibleTinyGeocoderRawCoordinate componentsSeparatedByString:@","];
-		if ([possibleRawLatitudeAndRawLongitude count] == 2) {
-			NSString *rawLatitude = [possibleRawLatitudeAndRawLongitude objectAtIndex:0];
-			NSString *rawLongitude = [possibleRawLatitudeAndRawLongitude objectAtIndex:1];
-			
-			double latitude = [rawLatitude doubleValue];
-			double longitude = [rawLongitude doubleValue];
-			
-			CLLocation *location = [[[CLLocation alloc] initWithLatitude:latitude
-															   longitude:longitude] autorelease];
-			NSLog(@"found location for query %@", location);
-			[self reverseGeocodeLocation:location];
-		} else {
-			[self alertMessage:[NSString stringWithFormat:
-								@"Could not find location for %@",
-								self.searchBar.text]];
-		}
-	} else if (connection == self.padMapperPinsUrlConnection) {
+	if (connection == self.padMapperPinsUrlConnection) {
 		NSString *padMapperAnnotationsJson = urlDataString;
 		NSError *error = nil;
 		NSArray *padMapperAnnotationDictionaries =
@@ -163,7 +145,6 @@
 
 - (void)connection:(NSURLConnection *)connection 
   didFailWithError:(NSError *)error {
-	self.tinyGeocoderUrlConnection = nil;
 	[self alertError:error];
 }
 
@@ -309,8 +290,6 @@
 	NSLog(@"Cancelling requests");
 	[self.locationManager stopUpdatingLocation];
 	self.mutableData = [NSMutableData data];
-	[self.tinyGeocoderUrlConnection cancel];
-	self.tinyGeocoderUrlConnection = nil;
     [self.geocoder cancelGeocode];
 	[self.padMapperPinsUrlConnection cancel];
 	self.padMapperPinsUrlConnection = nil;
