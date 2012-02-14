@@ -10,7 +10,7 @@
 #import <MapKit/MapKit.h>
 #import <CoreLocation/CoreLocation.h>
 
-@interface HBMapViewController : UIViewController<MKMapViewDelegate, UISearchBarDelegate, CLLocationManagerDelegate, MKReverseGeocoderDelegate, UIWebViewDelegate> {
+@interface HBMapViewController : UIViewController<MKMapViewDelegate, UISearchBarDelegate, CLLocationManagerDelegate, UIWebViewDelegate> {
 
 }
 

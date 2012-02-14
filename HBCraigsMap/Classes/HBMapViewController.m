@@ -19,7 +19,7 @@
 
 @property (nonatomic, retain) NSURLConnection *tinyGeocoderUrlConnection;
 
-@property (nonatomic, retain) MKReverseGeocoder *reverseGeocoder;
+@property (nonatomic, retain) CLGeocoder *geocoder;
 
 @property (nonatomic, retain) NSURLConnection *padMapperPinsUrlConnection;
 
@@ -43,7 +43,7 @@
 
 @synthesize tinyGeocoderUrlConnection = _tinyGeocoderUrlConnection;
 
-@synthesize reverseGeocoder = _reverseGeocoder;
+@synthesize geocoder = _geocoder;
 
 @synthesize padMapperPinsUrlConnection = _padMapperPinsUrlConnection;
 
@@ -58,7 +58,7 @@
 	
 	[_tinyGeocoderUrlConnection release];
 	
-	[_reverseGeocoder release];
+    [_geocoder release];
 	
 	[_padMapperPinsUrlConnection release];
 	
@@ -73,6 +73,7 @@
 	
 	self.locationManager = [[[CLLocationManager alloc] init] autorelease];
 	self.locationManager.delegate = self;
+    self.geocoder = [[[CLGeocoder alloc] init] autorelease];
 }
 
 #pragma mark -
@@ -186,33 +187,6 @@
 }
 
 #pragma mark -
-#pragma mark MKReverseGeocoderDelegate
-
-- (void)reverseGeocoder:(MKReverseGeocoder *)geocoder 
-	   didFindPlacemark:(MKPlacemark *)placemark {
-	NSLog(@"found placemark, setting map region");
-	self.searchBar.text = [NSString stringWithFormat:
-						   @"%@, %@ %@",
-						   placemark.locality,
-						   placemark.administrativeArea,
-						   placemark.postalCode];
-	
-	MKCoordinateRegion coordinateRegion = 
-		MKCoordinateRegionMakeWithDistance(placemark.coordinate,
-										   10 * 1000,
-										   10 * 1000);
-	[self.mapView setRegion:coordinateRegion
-				   animated:YES];
-}
-
-- (void)reverseGeocoder:(MKReverseGeocoder *)geocoder
-	   didFailWithError:(NSError *)error {
-	[self.reverseGeocoder cancel];
-	self.reverseGeocoder = nil;
-	[self alertError:error];
-}
-
-#pragma mark -
 #pragma mark MKMapViewDelegate
 
 - (void)mapView:(MKMapView *)mapView regionDidChangeAnimated:(BOOL)animated {
@@ -296,9 +270,26 @@
 
 - (void) reverseGeocodeLocation:(CLLocation *)location {
 	NSLog(@"Reverse Geocoding");
-	self.reverseGeocoder = [[[MKReverseGeocoder alloc] initWithCoordinate:location.coordinate] autorelease];
-	self.reverseGeocoder.delegate = self;
-	[self.reverseGeocoder start];
+    [self.geocoder reverseGeocodeLocation:location completionHandler:^(NSArray *placemarks, NSError *error) {
+        if(error) {
+            [self alertError:error];
+        } else {
+            NSLog(@"found placemark, setting map region");
+            CLPlacemark *placemark = [placemarks objectAtIndex:0];
+            self.searchBar.text = [NSString stringWithFormat:
+                                   @"%@, %@ %@",
+                                   placemark.locality,
+                                   placemark.administrativeArea,
+                                   placemark.postalCode];
+            
+            MKCoordinateRegion coordinateRegion = 
+            MKCoordinateRegionMakeWithDistance(placemark.location.coordinate,
+                                               10 * 1000,
+                                               10 * 1000);
+            [self.mapView setRegion:coordinateRegion
+                           animated:YES];
+        }
+    }];
 }
 
 - (void) alertError: (NSError *) error {
@@ -320,8 +311,7 @@
 	self.mutableData = [NSMutableData data];
 	[self.tinyGeocoderUrlConnection cancel];
 	self.tinyGeocoderUrlConnection = nil;
-	[self.reverseGeocoder cancel];
-	self.reverseGeocoder = nil;
+    [self.geocoder cancelGeocode];
 	[self.padMapperPinsUrlConnection cancel];
 	self.padMapperPinsUrlConnection = nil;
 	[self.webView stopLoading];
